@@ -1,0 +1,11 @@
+{
+  "name": "cometchat_sdk_react",
+  "version": "1.0.0",
+  "description": "This is a sample to test Cometchat react SDKs",
+  "main": "index.js",
+  "scripts": {
+    "test": "start"
+  },
+  "author": "Afroz",
+  "license": "ISC"
+}
