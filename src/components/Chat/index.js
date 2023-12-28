@@ -43,6 +43,26 @@ const Chat = () => {
         );
     }
 
+    // fetch missed messages of a particular one-on-one conversation
+    const fetchMissedMessages = async (uid) => {
+        const UID = uid;
+        const limit = 30;
+        const latestId = await CometChat.getLastDeliveredMessageId();
+
+        const messagesRequest = new CometChat.MessagesRequestBuilder()
+            .setUID(UID)
+            .setMessageId(latestId)
+            .setLimit(limit)
+            .build();
+
+        messagesRequest.fetchNext().then(
+            messages => {
+                console.log("Message list fetched:", messages);
+            }, error => {
+                console.log("Message fetching failed with error:", error);
+            }
+        );
+    }
 
     useEffect(() => {
         let listenerID = new Date().getTime();
@@ -77,12 +97,19 @@ const Chat = () => {
             <hr color="blue" />
             <input type="file" onChange={(e) => setMediaMessage(e.target.files[0])} />
             <input placeholder='Caption' type='text' value={mediaCaption} onChange={(e) => setMediaCaption(e.target.value)} />
-            <input type='text' placeholder='Tags' value={mediaTags} onChange={(e) => setMediaTags(e.target.value)} />
+            <input type='text' placeholder='Tags. split by ","' value={mediaTags} onChange={(e) => setMediaTags(e.target.value)} />
             <p>Send to :-</p>
             {username === "Captain America" ? '' : <button onClick={() => sendMediaMessageTo("superhero2")}>Captain America</button>}
             {username === 'Spiderman' ? '' : <button onClick={() => sendMediaMessageTo("superhero3")}>Spiderman</button>}
             {username === 'Wolverine' ? '' : <button onClick={() => sendMediaMessageTo("superhero4")}>Wolverine</button>}
             {username === 'Iron Man' ? '' : <button onClick={() => sendMediaMessageTo("superhero1")}>Iron Man</button>}
+            <hr color="blue" />
+            <p>Fetch missed messages of :-</p>
+            {username === "Captain America" ? '' : <button onClick={() => fetchMissedMessages("superhero2")}>Captain America</button>}
+            {username === 'Spiderman' ? '' : <button onClick={() => fetchMissedMessages("superhero3")}>Spiderman</button>}
+            {username === 'Wolverine' ? '' : <button onClick={() => fetchMissedMessages("superhero4")}>Wolverine</button>}
+            {username === 'Iron Man' ? '' : <button onClick={() => fetchMissedMessages("superhero1")}>Iron Man</button>}
+            <hr color="blue" />
         </div>
     )
 }
