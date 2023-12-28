@@ -45,7 +45,22 @@ const Chat = () => {
 
 
     useEffect(() => {
+        let listenerID = new Date().getTime();
 
+        CometChat.addMessageListener(
+            listenerID,
+            new CometChat.MessageListener({
+                onTextMessageReceived: textMessage => {
+                    console.log("Text message received successfully", textMessage);
+                },
+                onMediaMessageReceived: mediaMessage => {
+                    console.log("Media message received successfully", mediaMessage);
+                },
+                onCustomMessageReceived: customMessage => {
+                    console.log("Custom message received successfully", customMessage);
+                }
+            })
+        );
     }, [])
 
     return (
