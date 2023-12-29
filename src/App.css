@@ -7,6 +7,13 @@
   pointer-events: none;
 }
 
+.incoming_call_box{
+  border: 1px solid red;
+  margin: 10px auto;
+  width: 200px;
+  padding: 10px;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .App-logo {
     animation: App-logo-spin infinite 20s linear;

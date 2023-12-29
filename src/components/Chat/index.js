@@ -1,14 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { CometChat } from '@cometchat/chat-sdk-javascript';
+import { userInfo } from '../../credentials';
+import { CometChatCalls } from '@cometchat/calls-sdk-javascript';
 
 const Chat = () => {
     const username = localStorage.getItem("username")
+    const callLayoutContainer = useRef();
     const [textMessage, setTextMessage] = useState('');
     const [mediaMessage, setMediaMessage] = useState(false);
     const [mediaCaption, setMediaCaption] = useState('');
     const [mediaTags, setMediaTags] = useState('');
     const [searchMessage, setSearchMessage] = useState('');
     const [unreadMessagesCount, setUnreadMessagesCount] = useState('');
+    // const [callType, setCallType] = useState('audio');
+    const [isOngoingCall, setIsOngoingCall] = useState(false);
+    const [isIncomingCall, setIsIncomingCall] = useState(false);
+    const [callUID, setCallUID] = useState(null);
+    const [callSessionId, setCallSessionId] = useState(null);
+    const [callToken, setCallToken] = useState(null);
 
     // send text messages
     const sendMessageTo = (uid) => {
@@ -125,7 +134,7 @@ const Chat = () => {
                 res => {
                     console.log("Messages cound fetched", res);
                     let count = 0
-                    for(let k in res.users){
+                    for (let k in res.users) {
                         count += res.users[k]
                     }
                     setUnreadMessagesCount(count)
@@ -137,10 +146,138 @@ const Chat = () => {
         }
     }
 
+    // retrieve single conversation
+    const retrieveSingleConversation = (uid, type) => {
+        CometChat.getConversation(uid, type).then(
+            conversation => {
+                console.log('conversation', conversation);
+            }, error => {
+                console.log('error while fetching a conversation', error);
+            }
+        );
+    }
+
+
+    // generate call token
+    const generateCallToken = async (sessionId) => {
+        const loggedInUser = await CometChat.getLoggedinUser();
+        if (loggedInUser) {
+            const authToken = loggedInUser.getAuthToken();
+            const sessionID = sessionId;
+
+            CometChatCalls.generateToken(sessionID, authToken).then(
+                (res) => {
+                    console.log("Call token fetched: ", res.token);
+                    setCallToken(res.token);
+                },
+                (err) => {
+                    console.log("Generating call token failed with error: ", err);
+                }
+            );
+        }
+    }
+
+    // make an audio call to a particular user
+    const makeAudioDefaultCallTo = (uid) => {
+        const receiverID = uid;
+        const callType = CometChat.CALL_TYPE.AUDIO;
+        const receiverType = CometChat.RECEIVER_TYPE.USER;
+
+        const call = new CometChat.Call(receiverID, callType, receiverType);
+
+        CometChat.initiateCall(call).then(
+            outGoingCall => {
+                console.log("Call initiated successfully:", outGoingCall);
+                setCallSessionId(outGoingCall.sessionId)
+                generateCallToken(outGoingCall.sessionId)
+            }, error => {
+                console.log("Call initialization failed with exception:", error);
+            }
+        );
+    }
+
+    // reject incoming call
+    const rejectIncomingCall = () => {
+        const sessionID = callSessionId;
+        const status = CometChat.CALL_STATUS.REJECTED;
+
+        CometChat.rejectCall(sessionID, status).then(
+            call => {
+                console.log("Call rejected successfully", call);
+                setIsIncomingCall(false);
+            }, error => {
+                console.log("Call rejection failed with error:", error);
+            }
+        );
+    }
+
+    // accept incoming call
+    const acceptIncomingCall = () => {
+        const sessionID = callSessionId;
+
+        CometChat.acceptCall(sessionID).then(
+            call => {
+                console.log("Call accepted successfully:", call);
+            }, error => {
+                console.log("Call acceptance failed with error", error);
+            }
+        );
+    }
+
+    // call listeners
+    const callListeners = (listId) => {
+        CometChat.addCallListener(
+            listId,
+            new CometChat.CallListener({
+                onIncomingCallReceived: (call) => {
+                    console.log("Incoming call:", call);
+                    setIsIncomingCall(true);
+                    setCallSessionId(call.sessionId)
+                },
+                onOutgoingCallAccepted: (call) => {
+                    console.log("Outgoing call accepted:", call);
+                },
+                onOutgoingCallRejected: (call) => {
+                    console.log("Outgoing call rejected:", call);
+                },
+                onIncomingCallCancelled: (call) => {
+                    console.log("Incoming call calcelled:", call);
+                    setIsIncomingCall(false);
+                    setCallSessionId(null);
+                },
+                onCallEndedMessageReceived: (call) => {
+                    console.log("CallEnded Message:", call);
+                    setCallSessionId(false);
+                    setIsIncomingCall(false);
+                    CometChat.clearActiveCall();
+                    CometChatCalls.endSession();
+                }
+            })
+        );
+    }
 
     useEffect(() => {
         let listenerID = new Date().getTime();
 
+        // initialize calls
+        let appID = userInfo.appId;
+        let region = userInfo.region;
+
+        const callAppSetting = new CometChatCalls.CallAppSettingsBuilder()
+            .setAppId(appID)
+            .setRegion(region)
+            .build();
+
+        CometChatCalls.init(callAppSetting).then(
+            () => {
+                console.log('CometChatCalls initialization completed successfully');
+            },
+            error => {
+                console.log('CometChatCalls initialization failed with error:', error);
+            },
+        );
+
+        // add message listeners
         CometChat.addMessageListener(
             listenerID,
             new CometChat.MessageListener({
@@ -155,7 +292,108 @@ const Chat = () => {
                 }
             })
         );
+
+        // add call listeners
+        callListeners(listenerID)
     }, [])
+
+    // comethcat outgoing call listeners builder
+    const setOutGoingCallListeners = () => {
+        const defaultLayout = true;
+        const audioOnly = true;
+
+        const callSettings = new CometChatCalls.CallSettingsBuilder()
+            .enableDefaultLayout(defaultLayout)
+            .setIsAudioOnlyCall(audioOnly)
+            .setCallListener(
+                new CometChatCalls.OngoingCallListener({
+                    onUserListUpdated: (userList) => {
+                        console.log("user list:", userList);
+                    },
+                    onCallEnded: () => {
+                        console.log("Call ended");
+                    },
+                    onError: (error) => {
+                        console.log("Error :", error);
+                    },
+                    onMediaDeviceListUpdated: (deviceList) => {
+                        console.log("Device List:", deviceList);
+                    },
+                    onUserMuted: (event) => {
+                        // This event will work in JS SDK v3.0.2-beta1 & later.
+                        console.log("Listener => onUserMuted:", {
+                            userMuted: event.muted,
+                            userMutedBy: event.mutedBy,
+                        });
+                    },
+                    onScreenShareStarted: () => {
+                        // This event will work in JS SDK v3.0.3 & later.
+                        console.log("Screen sharing started.");
+                    },
+                    onScreenShareStopped: () => {
+                        // This event will work in JS SDK v3.0.3 & later.
+                        console.log("Screen sharing stopped.");
+                    },
+                    onCallSwitchedToVideo: (event) => {
+                        // This event will work in JS SDK v3.0.8 & later.
+                        console.log("call switched to video:", {
+                            sessionId: event.sessionId,
+                            callSwitchInitiatedBy: event.initiator,
+                            callSwitchAcceptedBy: event.responder,
+                        });
+                    },
+                    onUserJoined: (user) => console.log("event => onUserJoined", user),
+                    onUserLeft: (user) => console.log("event => onUserLeft", user),
+                })
+            )
+            .build();
+
+        const htmlElement = document.getElementById("container");
+        CometChatCalls.startSession(
+            callToken,
+            callSettings,
+            htmlElement
+        );
+    }
+
+    // call event listeners
+    // const eventCallListeners = () => {
+    //     useEffect(() => {
+    //         CometChatCalls.addCallEventListener('UNIQUE_ID', {
+    //             onUserJoined: user => {
+    //                 console.log("user joined:", user);
+    //             },
+    //             onUserLeft: user => {
+    //                 console.log("user left:", user);
+    //             },
+    //             onUserListUpdated: userList => {
+    //                 console.log("user list:", userList);
+    //             },
+    //             onCallEnded: () => {
+    //                 console.log("Call ended");
+    //             },
+    //             onCallEndButtonPressed: () => {
+    //                 console.log("End Call button pressed");
+    //             },
+    //             onError: error => {
+    //                 console.log('Call Error: ', error);
+    //             },
+    //             onAudioModesUpdated: (audioModes) => {
+    //                 console.log("audio modes:", audioModes);
+    //             },
+    //             onUserMuted: (event) => {
+    //                 console.log("user muted:", event);
+    //             }
+    //         });
+    //         return () => CometChatCalls.removeCallEventListener('UNIQUE_ID')
+    //     }, [])
+    // }
+
+    // set outgoing callsettingbuilder
+    useEffect(() => {
+        if (callToken)
+            setOutGoingCallListeners()
+    }, [callToken])
 
     return (
         <div className='Chat'>
@@ -228,6 +466,37 @@ const Chat = () => {
                 }} onClick={() => fetchUnreadMessagesCount(false)}>Count all</button>
             </div>
             <hr color='blue' />
+            {/* retrieve single conversation */}
+            <div className='retrieve_single_conversation'>
+                <h2>Retrieve single conversation with :- </h2>
+                {username === "Captain America" ? '' : <button onClick={() => retrieveSingleConversation("superhero2", "user")}>Captain America</button>}
+                {username === 'Spiderman' ? '' : <button onClick={() => retrieveSingleConversation("superhero3", "user")}>Spiderman</button>}
+                {username === 'Wolverine' ? '' : <button onClick={() => retrieveSingleConversation("superhero4", "user")}>Wolverine</button>}
+                {username === 'Iron Man' ? '' : <button onClick={() => retrieveSingleConversation("superhero1", "user")}>Iron Man</button>}
+            </div>
+            <hr color='blue' />
+            {/* make a audio call */}
+            <div className='make_audio_call'>
+                <h2>Make default audio call to :- </h2>
+                {/* calling box */}
+                {isIncomingCall ? <div className='incoming_call_box'>
+                    <p>Calling - {callUID} </p>
+                    <button style={{
+                        backgroundColor: "lime"
+                    }} onClick={acceptIncomingCall}>ACCEPT</button>
+                    <button style={{
+                        backgroundColor: "red",
+                        color: "#fff"
+                    }} onClick={rejectIncomingCall}>CANCEL</button>
+                </div> : null}
+
+                {username === "Captain America" ? '' : <button onClick={() => makeAudioDefaultCallTo("superhero2")}>Captain America</button>}
+                {username === 'Spiderman' ? '' : <button onClick={() => makeAudioDefaultCallTo("superhero3")}>Spiderman</button>}
+                {username === 'Wolverine' ? '' : <button onClick={() => makeAudioDefaultCallTo("superhero4")}>Wolverine</button>}
+                {username === 'Iron Man' ? '' : <button onClick={() => makeAudioDefaultCallTo("superhero1")}>Iron Man</button>}
+            </div>
+            <hr color='blue' />
+            <div ref={callLayoutContainer} id='container'></div>
         </div>
     )
 }

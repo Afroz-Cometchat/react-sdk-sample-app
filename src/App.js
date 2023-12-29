@@ -5,6 +5,7 @@ import Home from './components/Home';
 import Chat from './components/Chat';
 import { CometChat } from '@cometchat/chat-sdk-javascript';
 import { userInfo } from './credentials';
+import GroupChats from './components/GroupChats';
 
 function App() {
 
@@ -32,6 +33,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/chats" element={<Chat />} />
+          <Route path="/group-chats" element={<GroupChats />} />
         </Routes>
       </BrowserRouter>
     </div>

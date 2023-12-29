@@ -74,7 +74,8 @@ function Home() {
             <hr />
             <button onClick={logout}>LOGOUT</button>
             <hr color='red' />
-            <button onClick={() => navigate("/chats")}>Go to Chats</button>
+            <button onClick={() => navigate("/chats")}>Go to Chats</button> <br />
+            <button onClick={() => navigate("group-chats")}>Group Chats</button>
         </div>
     );
 }
